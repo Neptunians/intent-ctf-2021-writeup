@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mass Notes</title>
+    <link rel="stylesheet" href="./index_files/style.css">
+</head>
+
+<body>
+    <header>
+        <h1>Mass Notes</h1>
+    </header>
+    <main>
+        <form>
+            <input placeholder="Your note title" required="" name="title">
+            <textarea placeholder="Anything..." required="" name="content"></textarea>
+            <button>Publish</button>
+        </form>
+    </main>
+    <script>
+        const form = document.querySelector("form");
+        form.addEventListener("submit", function (event) {
+            event.preventDefault();
+
+            const postBody = {};
+            form.querySelectorAll("input,textarea").forEach(field => postBody[field.getAttribute("name")] = field.value);
+
+            fetch("/note", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(postBody)
+            }).then(async response => {
+                const note = await response.json();
+                window.location = "/note.html?note=" + encodeURIComponent(JSON.stringify(note));
+            }).catch(error => {
+                alert("Failed to create a new note.");
+            });
+        });
+    </script>
+
+
+</body></html>

